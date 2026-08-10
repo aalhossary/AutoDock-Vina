@@ -948,7 +948,7 @@ void Vina::global_search(const int exhaustiveness, const int n_poses, const doub
 	done(m_verbosity, 1);
 	if (m_statistics){
 		double dt = seconds_since(now);
-		std::cout << "\nFinished docking: " << evalcount << " energy evaluations took " << std::setprecision(3) << dt*1000.0 << " ms (" << dt/evalcount*1E6 << " µs/eval)\n";
+		std::cout << std::fixed << std::setprecision(3) << "\nFinished docking: " << evalcount << " energy evaluations took " << dt*1000.0 << " ms (" << dt/evalcount*1E6 << " µs/eval)\n";
 	}
 
 	// Docking post-processing and rescoring
