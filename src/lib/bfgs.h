@@ -63,7 +63,7 @@ inline bool bfgs_update(flmat& h, const Change& p, const Change& y, const fl alp
 }
 
 template<typename F, typename Conf, typename Change>
-fl line_search(F& f, sz n, const Conf& x, const Change& g, const fl f0, const Change& p, Conf& x_new, Change& g_new, fl& f1, int& evalcount) { // returns alpha
+fl line_search(F& f, sz n, const Conf& x, const Change& g, const fl f0, const Change& p, Conf& x_new, Change& g_new, fl& f1, sz& evalcount) { // returns alpha
 	const fl c0 = 0.0001;
 	const unsigned max_trials = 10;
 	const fl multiplier = 0.5;
@@ -94,8 +94,7 @@ void subtract_change(Change& b, const Change& a, sz n) { // b -= a
 }
 
 template<typename F, typename Conf, typename Change>
-fl bfgs(F& f, Conf& x, Change& g, const unsigned max_steps, const fl average_required_improvement, const sz over,
-		int& evalcount) { // x is I/O, final value is returned
+fl bfgs(F& f, Conf& x, Change& g, const unsigned max_steps, const fl average_required_improvement, const sz over, sz& evalcount) { // x is I/O, final value is returned
 	sz n = g.num_floats();
 	flmat h(n, 0);
 	set_diagonal(h, 1);

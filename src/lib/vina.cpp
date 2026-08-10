@@ -24,6 +24,42 @@
 #include "scoring_function.h"
 #include "precalculate.h"
 
+#ifndef _WIN32
+// Time measurement
+#include <sys/time.h>
+typedef timeval current_time;
+#else
+#include "profileapi.h"
+typedef LARGE_INTEGER current_time;
+#endif
+
+template<typename T>
+inline double seconds_since(T& time_start)
+{
+#ifndef _WIN32
+	current_time time_end;
+	gettimeofday(&time_end,NULL);
+	double num_sec     = time_end.tv_sec  - time_start.tv_sec;
+	double num_usec    = time_end.tv_usec - time_start.tv_usec;
+	return (num_sec + (num_usec/1000000));
+#else
+	LARGE_INTEGER time_end, freq;
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&time_end);
+	return (double)(time_end.QuadPart - time_start.QuadPart) / (double)freq.QuadPart;
+#endif
+}
+
+template<typename T>
+inline void start_timer(T& time_start)
+{
+#ifndef _WIN32
+	gettimeofday(&time_start,NULL);
+#else
+	QueryPerformanceCounter(&time_start);
+#endif
+}
+
 
 void Vina::cite() {
 	const std::string cite_message = "\
@@ -787,7 +823,6 @@ std::vector<double> Vina::optimize(output_type& out, int max_steps) {
 	const vec authentic_v(1000, 1000, 1000);
 	std::vector<double> energies_before_opt;
 	std::vector<double> energies_after_opt;
-	int evalcount = 0;
 
 	// Define the number minimization steps based on the number moving atoms
 	if (max_steps == 0) {
@@ -902,12 +937,18 @@ void Vina::global_search(const int exhaustiveness, const int n_poses, const doub
 	// Docking search
 	sstm << "Performing docking (random seed: " << m_seed << ")";
 	doing(sstm.str(), m_verbosity, 0);
+	current_time now;
+	start_timer(now);
 	if (m_sf_choice == SF_VINA || m_sf_choice == SF_VINARDO) {
-		parallelmc(m_model, poses, m_precalculated_byatom,    m_grid, m_grid.corner1(), m_grid.corner2(), generator, m_progress_callback);
+		parallelmc(m_model, poses, m_precalculated_byatom,    m_grid, m_grid.corner1(), m_grid.corner2(), generator, evalcount, m_progress_callback);
 	} else {
-		parallelmc(m_model, poses, m_precalculated_byatom, m_ad4grid, m_ad4grid.corner1(), m_ad4grid.corner2(), generator, m_progress_callback);
+		parallelmc(m_model, poses, m_precalculated_byatom, m_ad4grid, m_ad4grid.corner1(), m_ad4grid.corner2(), generator, evalcount, m_progress_callback);
 	}
 	done(m_verbosity, 1);
+	if (m_statistics){
+		double dt = seconds_since(now);
+		std::cout << "Finished docking: " << evalcount << " energy evaluations took " << std::setprecision(3) << dt << " s (" << dt/evalcount*1E6 << " µs/eval)\n";
+	}
 
 	// Docking post-processing and rescoring
 	poses = remove_redundant(poses, min_rmsd);
@@ -922,7 +963,6 @@ void Vina::global_search(const int exhaustiveness, const int n_poses, const doub
 				quasi_newton quasi_newton_par;
 				//std::vector<double> energies_before_opt;
 				//std::vector<double> energies_after_opt;
-				int evalcount = 0;
 				const fl slope = 1e6;
 				m_non_cache.slope = slope;
 				quasi_newton_par.max_steps = unsigned((25 + m_model.num_movable_atoms()) / 3);

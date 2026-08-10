@@ -449,6 +449,7 @@ void model::assign_types() {
 			case EL_TYPE_SIZE : break;
 			default: VINA_CHECK(false);
 		}
+//		std::cout << ai.i+1 << ": " << x << "\n";
 	}
 }
 
