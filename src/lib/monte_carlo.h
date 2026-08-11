@@ -39,10 +39,10 @@ struct monte_carlo {
 	monte_carlo() : max_evals(0), global_steps(2500), temperature(1.2), hunt_cap(10, 1.5, 10), min_rmsd(0.5), num_saved_mins(50), mutation_amplitude(2) {}
 
 	output_type operator()(model& m, const precalculate_byatom& p, const igrid& ig, const vec& corner1,
-                           const vec& corner2, incrementable* increment_me, rng& generator, sz& evalcount) const;
+                           const vec& corner2, incrementable* increment_me, rng& generator, stats& statcount) const;
 	// out is sorted
 	void operator()(model& m, output_container& out, const precalculate_byatom& p, const igrid& ig,
-	                const vec& corner1, const vec& corner2, incrementable* increment_me, rng& generator, sz& evalcount) const;
+	                const vec& corner1, const vec& corner2, incrementable* increment_me, rng& generator, stats& statcount) const;
 };
 
 #endif

@@ -113,7 +113,6 @@ public:
 
 	void cite();
 	int seed() { return m_seed; }
-	sz nr_evals() { return evalcount; }
 	void set_receptor(const std::string &rigid_name=std::string(), const std::string &flex_name=std::string());
 	void set_ligand_from_string(const std::string &ligand_string);
 	void set_ligand_from_string(const std::vector<std::string> &ligand_string);
@@ -177,7 +176,7 @@ private:
 	int m_verbosity;
 	bool m_no_refine;
 	bool m_statistics;
-	sz evalcount = 0;
+	stats statcount;
 	
 	std::function<void(double)>* m_progress_callback;
 

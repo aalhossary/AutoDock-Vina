@@ -842,12 +842,12 @@ std::vector<double> Vina::optimize(output_type& out, int max_steps) {
 	// Try 5 five times to optimize locally the conformation
 	VINA_FOR(p, 5) {
 		if (m_sf_choice == SF_VINA || m_sf_choice == SF_VINARDO) {
-			quasi_newton_par(m_model, m_precalculated_byatom, m_grid,    out, g, authentic_v, evalcount);
+			quasi_newton_par(m_model, m_precalculated_byatom, m_grid,    out, g, authentic_v, statcount);
 			// Break if we succeed to bring (back) the ligand within the grid
 			if (m_grid.is_in_grid(m_model))
 				break;
 		} else {
-			quasi_newton_par(m_model, m_precalculated_byatom, m_ad4grid, out, g, authentic_v, evalcount);
+			quasi_newton_par(m_model, m_precalculated_byatom, m_ad4grid, out, g, authentic_v, statcount);
 			if (m_ad4grid.is_in_grid(m_model))
 				break;
 		}
@@ -936,19 +936,25 @@ void Vina::global_search(const int exhaustiveness, const int n_poses, const doub
 
 	// Docking search
 	sstm << "Performing docking (random seed: " << m_seed << ")";
-	evalcount = 0;
+	statcount.reset();
 	doing(sstm.str(), m_verbosity, 0);
 	current_time now;
 	start_timer(now);
 	if (m_sf_choice == SF_VINA || m_sf_choice == SF_VINARDO) {
-		parallelmc(m_model, poses, m_precalculated_byatom,    m_grid, m_grid.corner1(), m_grid.corner2(), generator, evalcount, m_progress_callback);
+		parallelmc(m_model, poses, m_precalculated_byatom,    m_grid, m_grid.corner1(), m_grid.corner2(), generator, statcount, m_progress_callback);
 	} else {
-		parallelmc(m_model, poses, m_precalculated_byatom, m_ad4grid, m_ad4grid.corner1(), m_ad4grid.corner2(), generator, evalcount, m_progress_callback);
+		parallelmc(m_model, poses, m_precalculated_byatom, m_ad4grid, m_ad4grid.corner1(), m_ad4grid.corner2(), generator, statcount, m_progress_callback);
 	}
 	done(m_verbosity, 1);
 	if (m_statistics){
 		double dt = seconds_since(now);
-		std::cout << std::fixed << std::setprecision(3) << "\nFinished docking: " << evalcount << " energy evaluations took " << dt*1000.0 << " ms (" << dt/evalcount*1E6 << " µs/eval)\n";
+		// acceptance rate = nr accepted / nr tries
+		std::cout << std::fixed << std::setprecision(3) << "\nOverall acceptance rate: " << (double)(statcount[2])/((double)(statcount[1]))*100.0 << "\%\n";
+		// avg. evals per line search = nr evals - nr tries / nr line searches (each try = 1 bfgs eval before the line search evals)
+		if(statcount[3]>0) std::cout << std::fixed << std::setprecision(3) << "Average evaluations per line search: " << (double)(statcount[0]-statcount[1])/((double)(statcount[3])) << "\n";
+		// avg. evals per MC move = nr evals / nr tries
+		std::cout << std::fixed << std::setprecision(3) << "Average evaluations per MC move: " << (double)(statcount[0])/((double)(statcount[1])) << "\n";
+		std::cout << std::fixed << std::setprecision(3) << "\nFinished docking: " << statcount[0] << " energy evaluations took " << dt*1000.0 << " ms (" << dt/statcount[0]*1.0E6 << " µs/eval)\n";
 	}
 
 	// Docking post-processing and rescoring
@@ -971,7 +977,7 @@ void Vina::global_search(const int exhaustiveness, const int n_poses, const doub
 				VINA_FOR_IN(i, poses){
 					VINA_FOR(p, 5){
 						m_non_cache.slope = 100 * std::pow(10.0, 2.0*p);
-						quasi_newton_par(m_model, m_precalculated_byatom, m_non_cache, poses[i], g, authentic_v, evalcount);
+						quasi_newton_par(m_model, m_precalculated_byatom, m_non_cache, poses[i], g, authentic_v, statcount);
 						if(m_non_cache.within(m_model))
 							break;
 					}
