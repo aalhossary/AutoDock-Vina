@@ -24,6 +24,7 @@
 #define VINA_BFGS_H
 
 #include "matrix.h"
+#include "search_database.h"
 
 typedef triangular_matrix<fl> flmat;
 
@@ -92,8 +93,12 @@ void subtract_change(Change& b, const Change& a, sz n) { // b -= a
 		b(i) -= a(i);
 }
 
+// `local` and `shared` are stores of already-visited points; either may be null,
+// and two nulls are stock Vina -- the block below is then not entered at all.
+// See search_database.h. The QuickVina family supplies them.
 template<typename F, typename Conf, typename Change>
-fl bfgs(F& f, Conf& x, Change& g, const unsigned max_steps, const fl average_required_improvement, const sz over) { // x is I/O, final value is returned
+fl bfgs(F& f, Conf& x, Change& g, const unsigned max_steps, const fl average_required_improvement, const sz over,
+        search_database* db = NULL, search_database* shared_db = NULL) { // x is I/O, final value is returned
 	sz n = g.num_floats();
 	flmat h(n, 0);
 	set_diagonal(h, 1);
@@ -101,6 +106,23 @@ fl bfgs(F& f, Conf& x, Change& g, const unsigned max_steps, const fl average_req
 	Change g_new(g);
 	Conf x_new(x);
 	fl f0 = f(x, g);
+
+	if(db) {
+		// Consult the shared store first, if there is one: the index it matched
+		// on is threaded into the local store's `excluded`, so a single entry
+		// cannot satisfy both checks. With no shared store -- QuickVina 2 --
+		// the local store is asked on its own, excluding nothing.
+		bool explored;
+		if(shared_db) {
+			int ret = shared_db->interesting(x, f0, g, 0);
+			explored = (ret >= 0) && (db->interesting(x, f0, g, ret) >= 0);
+		}
+		else
+			explored = db->interesting(x, f0, g, 0) >= 0;
+		if(explored)
+			return f0; // skip the local optimisation
+		db->add(x, f0, g);
+	}
 
 	fl f_orig = f0;
 	Change g_orig(g);
