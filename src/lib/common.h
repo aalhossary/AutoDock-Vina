@@ -319,9 +319,15 @@ inline fl pK_to_energy(fl pK) { return pK_to_energy_factor * pK; }
 inline void print(fl x, std::ostream& out = std::cout) {
 	out << x;
 }
+inline void getV(fl x, std::vector<double>& out) {
+	out.push_back(x);
+}
 
 inline void print(sz x, std::ostream& out = std::cout) {
 	out << x;
+}
+inline void getV(sz x, std::vector<double>& out) {
+	out.push_back(double(x));
 }
 
 inline void print(const vec& v, std::ostream& out = std::cout) {
@@ -334,6 +340,11 @@ inline void print(const vec& v, std::ostream& out = std::cout) {
 	out << ")";
 }
 
+inline void getV(const vec& v, std::vector<double>& out) {
+	VINA_FOR_IN(i, v) {
+		getV(v[i], out);
+	}
+}
 template<typename T>
 void print(const std::vector<T>& v, std::ostream& out = std::cout) {
 	out << "[";
@@ -346,11 +357,22 @@ void print(const std::vector<T>& v, std::ostream& out = std::cout) {
 }
 
 template<typename T>
-void printnl(const T& x, std::ostream& out = std::cout) {
-	print(x, out);
-	out << '\n';
+void print(const std::vector<T>& v, std::vector<double> out) {
+	VINA_FOR_IN(i, v) {
+		getV(v[i], out);
+	}
 }
 
+template<typename T>
+void printnl(const T& x, std::ostream& out = std::cout) {
+	print(x, out);
+	out<< "\n";
+}
+
+template<typename T>
+void getV(const T& x, std::vector<double> out) {
+	getV(x, out);
+}
 inline bool starts_with(const std::string& str, const std::string& start) {
 	return str.size() >= start.size() && str.substr(0, start.size()) == start;
 }

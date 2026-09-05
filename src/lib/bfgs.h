@@ -152,6 +152,10 @@ fl bfgs(F& f, Conf& x, Change& g, const unsigned max_steps, const fl average_req
 		}
 
 		bool h_updated = bfgs_update(h, p, y, alpha);
+		// Every optimisation step is recorded, not just the entry point: the
+		// database holds the trajectory, which is what makes the first-order
+		// test effective. QuickVina 2 does this at its bfgs.h:160.
+		if(db) db->add(x, f0, g);
 	}
 	if(!(f0 <= f_orig)) { // succeeds for nans too
 		f0 = f_orig;

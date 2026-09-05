@@ -41,6 +41,7 @@
 #include "weighted_terms.h"
 #include "current_weights.h"
 #include "quasi_newton.h"
+#include "visited.h"
 #include "tee.h"
 #include "coords.h" // add_to_output_container
 
@@ -112,14 +113,23 @@ void do_randomization(model& m,
 	m.write_structure(make_path(out_name));
 }
 
-void refine_structure(model& m, const precalculate& prec, non_cache& nc, output_type& out, const vec& cap, sz max_steps = 1000) {
+// `store` is the QuickVina visited-point store, or null for stock Vina.
+//
+// Post-search polishing of the output poses consults the same filter the search
+// uses. In QuickVina 2 that happens implicitly, because the store is a member of
+// `model` and this runs on the model; here it is passed explicitly so it is
+// visible rather than inherited. Measured on the reference complex: 20 consults
+// during refinement, of which 12 skip the optimisation -- small, but it moves
+// the reported coordinates, so reproducing QVina_2.1 requires it.
+void refine_structure(model& m, const precalculate& prec, non_cache& nc, output_type& out, const vec& cap, sz max_steps = 1000,
+                      search_database* store = NULL) {
 	change g(m.get_size());
 	quasi_newton quasi_newton_par;
 	quasi_newton_par.max_steps = max_steps;
 	const fl slope_orig = nc.slope;
 	VINA_FOR(p, 5) {
 		nc.slope = 100 * std::pow(10.0, 2.0*p);
-		quasi_newton_par(m, prec, nc, out, g, cap);
+		quasi_newton_par(m, prec, nc, out, g, cap, store);
 		m.set(out.c); // just to be sure
 		if(nc.within(m))
 			break;
@@ -158,6 +168,14 @@ void do_search(model& m, const boost::optional<model>& ref, const scoring_functi
 	conf c = m.get_initial_conf();
 	fl e = max_fl;
 	const vec authentic_v(1000, 1000, 1000);
+#if QVINA_SEARCH == SEARCH_QVINA_W
+	circularvisited refine_db_storage;
+#else
+	visited refine_db_storage;
+#endif
+	// Lifetime matches QuickVina 2's, where the store is a member of the model
+	// this function is called with: one store for all refinements in this run.
+	search_database* refine_db = QVINA_SEARCH != SEARCH_VINA ? &refine_db_storage : NULL;
 	if(score_only) {
 		fl intramolecular_energy = m.eval_intramolecular(prec, authentic_v, c);
 		naive_non_cache nnc(&prec); // for out of grid issues
@@ -187,7 +205,7 @@ void do_search(model& m, const boost::optional<model>& ref, const scoring_functi
 	else if(local_only) {
 		output_type out(c, e);
 		doing(verbosity, "Performing local search", log);
-		refine_structure(m, prec, nc, out, authentic_v, par.mc.ssd_par.evals);
+		refine_structure(m, prec, nc, out, authentic_v, par.mc.ssd_par.evals, refine_db);
 		done(verbosity, log);
 		fl intramolecular_energy = m.eval_intramolecular(prec, authentic_v, out.c);
 		e = m.eval_adjusted(sf, prec, nc, authentic_v, out.c, intramolecular_energy);
@@ -215,7 +233,7 @@ void do_search(model& m, const boost::optional<model>& ref, const scoring_functi
 
 		doing(verbosity, "Refining results", log);
 		VINA_FOR_IN(i, out_cont)
-			refine_structure(m, prec, nc, out_cont[i], authentic_v, par.mc.ssd_par.evals);
+			refine_structure(m, prec, nc, out_cont[i], authentic_v, par.mc.ssd_par.evals, refine_db);
 
 		if(!out_cont.empty()) {
 			out_cont.sort();

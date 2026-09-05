@@ -24,6 +24,7 @@
 #include "coords.h"
 #include "mutate.h"
 #include "quasi_newton.h"
+#include "visited.h"
 
 output_type monte_carlo::operator()(model& m, const precalculate& p, const igrid& ig, const precalculate& p_widened, const igrid& ig_widened, const vec& corner1, const vec& corner2, incrementable* increment_me, rng& generator) const {
 	output_container tmp;
@@ -87,12 +88,21 @@ void monte_carlo::operator()(model& m, output_container& out, const precalculate
 	tmp.c.randomize(corner1, corner2, generator);
 	fl best_e = max_fl;
 	quasi_newton quasi_newton_par; quasi_newton_par.max_steps = ssd_par.evals;
+	// One store per Monte Carlo task: operator() is a single task's run, so a
+	// local here is exactly the per-task lifetime QuickVina wants. Null unless
+	// this binary is a QuickVina target.
+#if QVINA_SEARCH == SEARCH_QVINA_W
+	circularvisited tried;   // QuickVina-W's
+#else
+	visited tried;           // QuickVina 2's
+#endif
+	search_database* db = use_database ? &tried : NULL;
 	VINA_U_FOR(step, num_steps) {
 		if(increment_me)
 			++(*increment_me);
 		output_type candidate = tmp;
 		mutate_conf(candidate.c, m, mutation_amplitude, generator);
-		quasi_newton_par(m, p, ig, candidate, g, hunt_cap);
+		quasi_newton_par(m, p, ig, candidate, g, hunt_cap, db);
 		if(step == 0 || metropolis_accept(tmp.e, candidate.e, temperature, generator)) {
 			tmp = candidate;
 
@@ -100,7 +110,7 @@ void monte_carlo::operator()(model& m, output_container& out, const precalculate
 
 			// FIXME only for very promising ones
 			if(tmp.e < best_e || out.size() < num_saved_mins) {
-				quasi_newton_par(m, p, ig, tmp, g, authentic_v);
+				quasi_newton_par(m, p, ig, tmp, g, authentic_v, db);
 				m.set(tmp.c); // FIXME? useless?
 				tmp.coords = m.get_heavy_atom_movable_coords();
 				add_to_output_container(out, tmp, min_rmsd, num_saved_mins); // 20 - max size

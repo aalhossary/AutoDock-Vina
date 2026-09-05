@@ -9,12 +9,15 @@
 // The interface is QuickVina-W's, unchanged:
 //
 //     int  interesting(conf x, double f, change g, int excluded)
-//     void add(conf x, double f, change g)
+//     bool add(conf x, double f, change g)
 //
 // `interesting` returns a NEGATIVE value if the point is worth optimising, and
-// a NON-NEGATIVE one if it is not -- in which case the value is also the index
-// of the entry that matched, which the caller threads into the next store's
-// `excluded` argument so that one entry cannot satisfy both checks.
+// a NON-NEGATIVE one if it is not. The non-negative value is the NUMBER OF
+// CHECKS ALREADY SPENT, which the caller threads into the next store's
+// `excluded` argument: QuickVina-W checks P1 points globally and then P - P1
+// individually, so the two stages together never exceed the budget P. See
+// Hassan et al., Sci Rep 2017 -- "the second step ... is the normal QVina 2
+// check against thread's individual history points P2 [= P - P1]".
 //
 // Passing a null pointer disables a store, and two null stores are exactly
 // stock Vina. QuickVina-W already relied on that, guarding its consult with
@@ -32,7 +35,7 @@ struct search_database {
 
 	// Arguments are taken by value, matching QuickVina's own signature.
 	virtual int interesting(conf x, double f, change g, int excluded) = 0;
-	virtual void add(conf x, double f, change g) = 0;
+	virtual bool add(conf x, double f, change g) = 0;
 };
 
 #endif
