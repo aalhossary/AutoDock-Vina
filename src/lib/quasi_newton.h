@@ -32,7 +32,8 @@ struct quasi_newton {
 	quasi_newton() : max_steps(1000), average_required_improvement(0.0) {}
 	// clean up
 	void operator()(model& m, const precalculate& p, const igrid& ig, output_type& out, change& g, const vec& v,
-	                search_database* db = NULL, search_database* shared_db = NULL) const; // g must have correct size
+	                search_database* db = NULL, search_database* shared_db = NULL,
+	                bool global = false) const; // g must have correct size
 };
 
 #endif

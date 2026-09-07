@@ -82,6 +82,65 @@ bool ele::check(std::vector<double> now_x, double now_f, std::vector<double> now
 
 //just initialize the defaults outside the class to have any reference to them later
 
+Vec3 Octree::defaultHalfDimension;
+Vec3 Octree::defaultOrigin;
+Vec3 Octree::MINIMUM_HALFDIMENSION = Vec3(0.1, 0.1, 0.1);
+//Singleton design pattern
+Octree* Octree::instance=NULL;
+Octree* Octree::getInstance(){
+	if (!instance) {
+		static Octree self;
+		Octree::instance = & self;
+		std::cout << "lazy initialization done"<< std::endl;
+	}
+	return instance;
+}
+
+/**
+ * returns -1 if interesting (found at least one point with accepted condition),
+ * or a number >=0 indicating number of done checks otherwise (if nothing is found).
+ */
+int Octree::interesting(conf x, double f, change g, int excluded) {
+	//n.b. excluded is not used. it is here only for homology with the other function
+
+	std::vector<double> conf_v;
+	x.getV(conf_v);
+	std::vector<double> change_v;
+	g.getV(change_v);
+	std::vector<ele> nearbyPoints;
+	std::vector<double> distances;
+	Vec3 bmin(conf_v[0]-CUTOFF, conf_v[1]-CUTOFF, conf_v[2]-CUTOFF);
+	Vec3 bmax(conf_v[0]+CUTOFF, conf_v[1]+CUTOFF, conf_v[2]+CUTOFF);
+	getPointsWithinCutoff(CUTOFF*CUTOFF,conf_v, bmin, bmax, nearbyPoints, distances);
+
+	int len=nearbyPoints.size();
+	bool notYetChecked[len];
+	memset(notYetChecked,true,sizeof(notYetChecked));
+
+	const int grandMaxCheck= 1 * conf_v.size(); //1N in this case
+	const int maxCheck= (nearbyPoints.size()<= grandMaxCheck)? nearbyPoints.size():grandMaxCheck;
+
+	double min=1e10;
+	int i=0; //counts checked done so far
+	int p; //pointer to current nearest point
+	for ( ; i < maxCheck; i++){
+		min=1e10;
+		for (int j=0;j<len;j++){
+			if (notYetChecked[j] && (distances[j] <= min)){
+				p=j;
+				min=distances[p];
+			}
+		}
+		notYetChecked[p]=false;
+
+		if (nearbyPoints[p].check(conf_v, f, change_v)){
+			return -1; //i.e. return success
+		}
+	}
+	return i;
+}
+
+
 int circularvisited::interesting(conf x, double f, change g, int excluded){
 
 //	printf("%d   %d\n", get_maxCheck(), get_maxSize());

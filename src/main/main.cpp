@@ -113,23 +113,30 @@ void do_randomization(model& m,
 	m.write_structure(make_path(out_name));
 }
 
-// `store` is the QuickVina visited-point store, or null for stock Vina.
+// `store` and `shared_store` are the QuickVina visited-point stores, or null.
 //
-// Post-search polishing of the output poses consults the same filter the search
-// uses. In QuickVina 2 that happens implicitly, because the store is a member of
-// `model` and this runs on the model; here it is passed explicitly so it is
-// visible rather than inherited. Measured on the reference complex: 20 consults
-// during refinement, of which 12 skip the optimisation -- small, but it moves
-// the reported coordinates, so reproducing QVina_2.1 requires it.
+// QuickVina 2 consults its store here. That happens implicitly upstream, because
+// the store is a member of `model` and this runs on the model; here it is passed
+// explicitly so it is visible rather than inherited. Measured on the reference
+// complex: 20 consults during refinement, of which 12 skip the optimisation --
+// small, but it moves the reported coordinates, so reproducing QVina_2.1
+// requires it.
+//
+// QuickVina-W does NOT consult here: its refine_structure passes NULL for the
+// per-task store (`main.cpp:113`). It does still deposit each endpoint in the
+// shared store, because upstream reaches that one through a singleton inside
+// bfgs rather than through an argument. Reached only after the search has
+// finished, so within a single run it changes nothing -- carried anyway so the
+// two agree on what the store holds.
 void refine_structure(model& m, const precalculate& prec, non_cache& nc, output_type& out, const vec& cap, sz max_steps = 1000,
-                      search_database* store = NULL) {
+                      search_database* store = NULL, search_database* shared_store = NULL) {
 	change g(m.get_size());
 	quasi_newton quasi_newton_par;
 	quasi_newton_par.max_steps = max_steps;
 	const fl slope_orig = nc.slope;
 	VINA_FOR(p, 5) {
 		nc.slope = 100 * std::pow(10.0, 2.0*p);
-		quasi_newton_par(m, prec, nc, out, g, cap, store);
+		quasi_newton_par(m, prec, nc, out, g, cap, store, shared_store, false);
 		m.set(out.c); // just to be sure
 		if(nc.within(m))
 			break;
@@ -168,14 +175,19 @@ void do_search(model& m, const boost::optional<model>& ref, const scoring_functi
 	conf c = m.get_initial_conf();
 	fl e = max_fl;
 	const vec authentic_v(1000, 1000, 1000);
-#if QVINA_SEARCH == SEARCH_QVINA_W
-	circularvisited refine_db_storage;
-#else
-	visited refine_db_storage;
-#endif
+#if QVINA_SEARCH == SEARCH_QVINA_2
 	// Lifetime matches QuickVina 2's, where the store is a member of the model
 	// this function is called with: one store for all refinements in this run.
-	search_database* refine_db = QVINA_SEARCH != SEARCH_VINA ? &refine_db_storage : NULL;
+	visited refine_db_storage;
+	search_database* refine_db = &refine_db_storage;
+#else
+	search_database* refine_db = NULL;
+#endif
+#if QVINA_SEARCH == SEARCH_QVINA_W
+	search_database* refine_shared_db = Octree::getInstance();
+#else
+	search_database* refine_shared_db = NULL;
+#endif
 	if(score_only) {
 		fl intramolecular_energy = m.eval_intramolecular(prec, authentic_v, c);
 		naive_non_cache nnc(&prec); // for out of grid issues
@@ -205,7 +217,7 @@ void do_search(model& m, const boost::optional<model>& ref, const scoring_functi
 	else if(local_only) {
 		output_type out(c, e);
 		doing(verbosity, "Performing local search", log);
-		refine_structure(m, prec, nc, out, authentic_v, par.mc.ssd_par.evals, refine_db);
+		refine_structure(m, prec, nc, out, authentic_v, par.mc.ssd_par.evals, refine_db, refine_shared_db);
 		done(verbosity, log);
 		fl intramolecular_energy = m.eval_intramolecular(prec, authentic_v, out.c);
 		e = m.eval_adjusted(sf, prec, nc, authentic_v, out.c, intramolecular_energy);
@@ -233,7 +245,7 @@ void do_search(model& m, const boost::optional<model>& ref, const scoring_functi
 
 		doing(verbosity, "Refining results", log);
 		VINA_FOR_IN(i, out_cont)
-			refine_structure(m, prec, nc, out_cont[i], authentic_v, par.mc.ssd_par.evals, refine_db);
+			refine_structure(m, prec, nc, out_cont[i], authentic_v, par.mc.ssd_par.evals, refine_db, refine_shared_db);
 
 		if(!out_cont.empty()) {
 			out_cont.sort();
@@ -623,6 +635,14 @@ Thank you!\n";
 				log << "Output will be " << out_name << '\n';
 			}
 		}
+#if QVINA_SEARCH == SEARCH_QVINA_W
+		// The shared database is keyed on the ligand's position, so it is sized
+		// to the search box and must exist before any task starts.
+		Octree::setDefaultOrigin(Vec3(center_x, center_y, center_z));
+		Octree::setDefaultHalfDimension(Vec3(size_x, size_y, size_z));
+		Octree::getInstance();
+#endif
+
 
 		grid_dims gd; // n's = 0 via default c'tor
 

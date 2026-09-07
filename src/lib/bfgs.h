@@ -24,6 +24,7 @@
 #define VINA_BFGS_H
 
 #include "matrix.h"
+
 #include "search_database.h"
 
 typedef triangular_matrix<fl> flmat;
@@ -98,7 +99,8 @@ void subtract_change(Change& b, const Change& a, sz n) { // b -= a
 // See search_database.h. The QuickVina family supplies them.
 template<typename F, typename Conf, typename Change>
 fl bfgs(F& f, Conf& x, Change& g, const unsigned max_steps, const fl average_required_improvement, const sz over,
-        search_database* db = NULL, search_database* shared_db = NULL) { // x is I/O, final value is returned
+        search_database* db = NULL, search_database* shared_db = NULL,
+        bool global = false) { // x is I/O, final value is returned
 	sz n = g.num_floats();
 	flmat h(n, 0);
 	set_diagonal(h, 1);
@@ -157,6 +159,12 @@ fl bfgs(F& f, Conf& x, Change& g, const unsigned max_steps, const fl average_req
 		// test effective. QuickVina 2 does this at its bfgs.h:160.
 		if(db) db->add(x, f0, g);
 	}
+	// The shared database receives the ENDPOINT, and only from the
+	// authentic-potential refinement (`!global`) -- the paper's "high quality
+	// points". The per-task database above received every step of the way.
+	if(shared_db && !global)
+		shared_db->add(x, f0, g);
+
 	if(!(f0 <= f_orig)) { // succeeds for nans too
 		f0 = f_orig;
 		x = x_orig;
